@@ -4,3 +4,5 @@ class WrongTurnError(Exception):
         pass
 class IllegalBoardStateError(Exception):
     pass
+class IllegalGameStateError(Exception):
+    pass

@@ -1,7 +1,8 @@
 from typing import TYPE_CHECKING
+from errors import IllegalGameStateError
+from pieces import *
 if TYPE_CHECKING:
     from move import Move
-    from pieces import *
     from typedef import *
 
 TEAMS = ("W","B")
@@ -21,7 +22,7 @@ class GameState:
     enPassentSqHistory:list[None|Pos]
     kings: Teams[King]
     pieces: Teams[list[Piece]]
-    captured_pieces: Teams[list[Piece]]
+    captured_pieces: Teams[list[Capturable]]
     castle_rights: Teams[dict[Side, bool]]
     board: Board
 
@@ -78,16 +79,23 @@ class GameState:
             raise ValueError("Can only change turn by value of 1")
         self.half_turn += turn_inc
 
-    def getAllMoves(self)->dict[Pos, list[Move]]:
+    def rmv_piece_from_pieces(self, p: Piece) -> None:
+        for i in range(len(self.pieces[p.color])):
+            if self.pieces[p.color][i] is p:
+                self.pieces[p.color].pop(i)
+                return
+        raise IllegalGameStateError(f"Tried to remove {p} from {p.color} pieces but it wasn't there")
+    
+    def getAllMoves(self) -> dict[Pos, list[Move]]:
         pieces = self.pieces[self.get_color_turn()]
         moves: dict[Pos, list[Move]] = {}
         for p in pieces:
             moves[p.pos] = p.moves(self.board, self)
         return moves
     
-    def upd_game_state_moves(self):
+    def upd_game_state_moves(self) -> None:
         current_turn_all_moves = self.getAllMoves()
-        self.curr_turn_moves = self.validate_legal(current_turn_all_moves)
+        self.curr_turn_moves = self.get_valid_moves(current_turn_all_moves)
         
     def check_move_valid(self, move: Move):
        return move in self.curr_turn_moves[move.start]
@@ -98,7 +106,7 @@ class GameState:
         else:
             self.enPassentSqHistory.append(None)
     
-    def king_in_check(self, king: King):
+    def king_in_check(self, king: King) -> bool:
         if type(king) != King:
             TypeError()
         color_p = king.color
@@ -108,7 +116,7 @@ class GameState:
                 return True
         return False
     
-    def validate_legal(self, moves: dict[Pos, list[Move]])->dict[Pos, list[Move]]:
+    def get_valid_moves(self, moves: dict[Pos, list[Move]])->dict[Pos, list[Move]]:
         legal_moves: dict[Pos, list[Move]] = {}
         king = self.kings[self.get_color_turn()]
         assert king is not None
@@ -116,47 +124,54 @@ class GameState:
             for m in moves[p]:   
                 if type(m)==Castle and self._validate_castle(m):
                     legal_moves[p].append(m)
-                    continue
-                elif self.apply_move(m) and not self.king_in_check(king):
-                    legal_moves[p].append(m)
-                    self.undo_apply(m)
+                else:
+                    m.apply(self.board) 
+                    if not self.king_in_check(king):
+                        legal_moves[p].append(m)
+                    m.undo(self.board)
         return legal_moves
     
 
-    def _validate_castle(self, move:Castle)->bool:
-            king:Piece= move.piece
-            if not isinstance(king, King):
-                raise ValueError(f"Castle objects piece must be a king. Instead was ({king})")
-            
+    def _validate_castle(self, move:Castle) -> bool:
+            king = move.piece
             if self.king_in_check(king):
                 return False
             p = move.piece
             opp_pieces = self.pieces[self.get_other_color(p.color)]
-            ######
-            for gap_pos in CASTLE_CHECK_POS[king.color][move.castle_side]:
-                    
-                    return True 
-            return False
+            for pos in CASTLE_CHECK_POS[king.color][move.castle_side]:
+                if self.board.get_square(*pos) != None:
+                    return False
+                for opp_p in opp_pieces:
+                    if opp_p.isAttacking(pos, self.board):
+                        return False    
+            return True
     
-    def return_p(self, ret_piece: Piece):
-        self.cap_pieces[ret_piece.color].pop()
-        self.pieces[ret_piece.color].append(ret_piece)
-        self.board.place_piece(ret_piece)
 
-
-    def capture_p(self, cap_piece: Piece)->None:
-        if isinstance(cap_piece, King):
-            raise TypeError("Can't capture a King")
+    def add_captured_piece(self, cap_piece: Capturable) -> None:
         color = cap_piece.color
         for i in range(len(self.pieces[color])):
             if self.pieces[color][i] is cap_piece:
                 self.pieces[color].pop(i)
                 break
         self.cap_pieces[color].append(cap_piece)
-        self.board.remove_piece(cap_piece)
+       
+    def return_captured_piece(self, cap_piece: Capturable) -> None:
+        popped = self.cap_pieces[cap_piece.color].pop()
+        if popped is not cap_piece:
+            raise IllegalGameStateError("")
+        self.pieces[cap_piece.color].append(popped)
 
 
-    def update_castle_vars(self):
+    def add_promoted_piece(self, pawn: Pawn, piece: Capturable) -> None:
+        self.rmv_piece_from_pieces(pawn)
+        self.pieces[pawn.color].append(piece)
+
+
+    def return_promoted_piece(self, pawn: Pawn, piece: Capturable) -> None:
+        self.rmv_piece_from_pieces(piece)
+        self.pieces[pawn.color].append(pawn)
+
+    def update_castle_vars(self) -> None:
         for team in TEAMS:
             krook_pos = CASTLE_ROOK_DEFAULT_POS[team]["K"]
             qrook_pos = CASTLE_ROOK_DEFAULT_POS[team]["Q"]
@@ -170,29 +185,26 @@ class GameState:
                 for side in SIDES:
                     rook = rook_pos_vals[side]
                     if isinstance(rook, Rook) and not rook.has_moved():
-                        self.castle_rights[team][side] = False
-                    else:
                         self.castle_rights[team][side] = True
+                    else:
+                        self.castle_rights[team][side] = False
+        
+    def make_move(self, move: Move) -> None:
+        move.apply(self.board)
+        if isinstance(move, NormalMove) and move.capture:
+            self.add_captured_piece(move.capture)
+        if isinstance(move, Promotion):
+            self.add_promoted_piece(move.piece, move.promo_piece)
     
-    def apply_move(self, move: Move):
-        pass
+    def undo_move(self, move: Move):
+        move.undo(self.board)
+        if isinstance(move, NormalMove) and move.capture:
+            self.return_captured_piece(move.capture)
+        if isinstance(move, Promotion):
+            self.return_promoted_piece(move.piece, move.promo_piece)    
 
 
-
-
-    def undo_apply(self, move: Move):
-        pass
+    def check_gamestate_condtion(self)-> GameStatus:
+        return "checkmate"
         
-    def promote_pawn(self, move:Promotion):
-        p = move.piece
-        self.board.remove_piece(p)
-        self.board.place_piece(move.promo)
-        self.pieces[p.color].append(p)
 
-    def demote_pawn(self, move: Promotion):
-        p = move.piece
-        self.board.remove_piece
-        popped = self.pieces[p.color].pop()
-        if popped is not move.promo:
-            raise ValueError(f"Piece removed from {p.color} Player was ({popped}) not the promoted piece ({move.promo})")
-        

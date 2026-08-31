@@ -6,8 +6,6 @@ if TYPE_CHECKING:
     from move import Move
     from pieces import *
 
-
-
 class Game:
     def __init__(self, white_player, black_player):
         self.white = white_player 

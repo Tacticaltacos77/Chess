@@ -14,11 +14,6 @@ class Pos(NamedTuple):
     """(y, x) coordinates on the chess board."""
     y: int
     x: int
-
-class HasMovedMixIn:
-    moved: int
-    def has_moved(self)->bool:
-        return self.moved !=0
         
 class Piece:
     moveDir: tuple[Pos, ...]
@@ -26,7 +21,7 @@ class Piece:
     def __init__(self, color: Team, y: int, x: int):
         self.color: Team = color
         self.pos: Pos = Pos(y, x)
-
+        self.moved = 0
     def moves(self, b: Board, gS: GameState)->list[Move]:
         moves = []
         for dir in self.moveDir:
@@ -37,7 +32,7 @@ class Piece:
                 end_square = b.get_square(new_y, new_x)
                 if end_square == None:
                     moves.append((new_y,new_x))
-                elif self.is_valid_capture(end_square):
+                elif isinstance(end_square, Capturable):
                     moves.append((new_y,new_x))
                     break
                 else:
@@ -63,17 +58,18 @@ class Piece:
                     break
         return False
     
-    def is_valid_capture(self, end_p:Piece|None)->bool:
-        if end_p == None:
-            return False
-        return end_p.color != self.color and not isinstance(end_p, King)
-    
     def set_pos(self, end_pos: Pos):
         if not isinstance(end_pos, Pos):
             raise ValueError()
         self.pos = end_pos
 
-class Pawn(Piece, HasMovedMixIn):
+    def has_moved(self)->bool:
+        return self.moved !=0
+    
+class Capturable(Piece):
+    pass
+
+class Pawn(Capturable):
     maxMove:int =1
     forwardDir:int
     attackDir: Pos = Pos(-1, 1) 
@@ -109,7 +105,7 @@ class Pawn(Piece, HasMovedMixIn):
         for x_attack_dir in self.attackDir:
             new_x = self.pos.x + x_attack_dir
             end_square_val = b.get_square(new_y, new_x)
-            if self.is_valid_capture(end_square_val):
+            if isinstance(end_square_val, Capturable):
                 end_square_pos = Pos(new_y, new_x)
                 if new_y == self.promo_square:
                     for promo_piece_con in self.PROMOTION_PIECES_CONS:
@@ -133,7 +129,7 @@ class Pawn(Piece, HasMovedMixIn):
         else:
             return "P"
     
-class Rook(Piece, HasMovedMixIn):
+class Rook(Capturable):
     maxMove =7
     moveDir = (Pos(0,1),Pos(1,0),Pos(-1,0),Pos(0,-1))
     def __init__(self, color:Team, y:int, x:int):
@@ -145,7 +141,7 @@ class Rook(Piece, HasMovedMixIn):
         else:
             return "R" 
         
-class Knight(Piece):
+class Knight(Capturable):
     maxMove =1
     moveDir = (Pos(1,2),Pos(1,-2),Pos(2,1),Pos(2,-1),Pos(-2,-1),Pos(-2,1),Pos(-1,2),Pos(-1,-2))
     def __init__(self, color: Team, y:int, x:int):
@@ -156,7 +152,7 @@ class Knight(Piece):
         else:
             return "N"
      
-class Bishop(Piece):
+class Bishop(Capturable):
     maxMove =7
     moveDir = (Pos(1,1), Pos(1,-1), Pos(-1,1), Pos(-1,-1))
     def __init__(self, color: Team, y:int, x:int):
@@ -167,7 +163,7 @@ class Bishop(Piece):
         else:
             return "B"
         
-class Queen(Piece):
+class Queen(Capturable):
     maxMove =7
     moveDir = (Pos(0,1),Pos(1,0),Pos(-1,0),Pos(0,-1),Pos(1,1),Pos(1,-1),Pos(-1,1),Pos(-1,-1))
     def __init__(self, color: Team, y:int, x:int):
@@ -178,7 +174,7 @@ class Queen(Piece):
         else:
             return "Q"
         
-class King(Piece, HasMovedMixIn):
+class King(Piece):
     maxMove =1
     moveDir = (Pos(0,1),Pos(1,0),Pos(-1,0),Pos(0,-1),Pos(1,1),Pos(1,-1),Pos(-1,1),Pos(-1,-1))
     def __init__(self, color: Team, y:int, x: int):
