@@ -49,6 +49,7 @@ class Board:
     def get_piece(self, p: Piece) -> Piece:
         board_val = self.board[p.pos.y][p.pos.x]
         if not isinstance(board_val, Piece):
+            ####
             raise IllegalBoardStateError("Epected a piece at ")
         return board_val
     

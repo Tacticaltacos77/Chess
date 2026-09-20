@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from abc import ABC, abstractmethod
 if TYPE_CHECKING:
     from board import Board
-    from gameState import GameState  
+    from game import Game 
     from typedef import *
 
 class Piece:
@@ -15,7 +15,10 @@ class Piece:
         self.pos: Pos = Pos(y, x)
         self.moved = 0
 
-    def moves(self, b: Board, gS: GameState)->list[Move]:
+    def _get_letter(self, p:str) -> str:
+        return p.upper() if self.color =="W" else p.lower()
+    
+    def moves(self, b: Board, game: Game)->list[Move]:
         moves = []
         for dir in self.moveDir:
             currMove = self.maxMove
@@ -33,6 +36,7 @@ class Piece:
                 else:
                     break
         return moves
+    ### 
     def isAttacking(self, end_square: Pos, b:Board)->bool:
         end_y, end_x = end_square
         for y_atk_dir, x_atk_dir in self.moveDir:
@@ -71,44 +75,36 @@ class Rook(Capturable):
     def __init__(self, color:Team, y:int, x:int):
         super().__init__(color, y, x)
         self.moved = 0
-    def __str__(self):
-        if self.color == "W":
-            return "r"
-        else:
-            return "R" 
-        
+
+    def __str__(self) -> str:
+        return super()._get_letter("r")
+    
 class Knight(Capturable):
     maxMove =1
     moveDir = (Pos(1,2),Pos(1,-2),Pos(2,1),Pos(2,-1),Pos(-2,-1),Pos(-2,1),Pos(-1,2),Pos(-1,-2))
     def __init__(self, color: Team, y:int, x:int):
         super().__init__(color, y, x)
+
     def __str__(self):
-        if self.color == "W":
-            return "n"
-        else:
-            return "N"
-     
+        return super()._get_letter("n")
+    
 class Bishop(Capturable):
     maxMove =7
     moveDir = (Pos(1,1), Pos(1,-1), Pos(-1,1), Pos(-1,-1))
     def __init__(self, color: Team, y:int, x:int):
         super().__init__(color, y, x)
+
     def __str__(self):
-        if self.color == "W":
-            return "b"
-        else:
-            return "B"
+        return super()._get_letter("b")
         
 class Queen(Capturable):
     maxMove =7
     moveDir = (Pos(0,1),Pos(1,0),Pos(-1,0),Pos(0,-1),Pos(1,1),Pos(1,-1),Pos(-1,1),Pos(-1,-1))
     def __init__(self, color: Team, y:int, x:int):
         super().__init__(color, y, x)
+
     def __str__(self):
-        if self.color == "W":
-            return "q"
-        else:
-            return "Q"
+        return super()._get_letter("q")
         
 class King(Piece):
     maxMove =1
@@ -116,19 +112,17 @@ class King(Piece):
     def __init__(self, color: Team, y:int, x: int):
         super().__init__(color, y, x)
         self.moved = 0
+
     def __str__(self):
-        if self.color == "W":
-            return "k"
-        else:
-            return "K"
+        return super()._get_letter("k")
         
-    def moves(self, b: Board, gS: GameState)->list[Move]:
-        moves = super().moves(b, gS)
+    def moves(self, b: Board, game: Game)->list[Move]:
+        moves = super().moves(b, game)
         for castle_dir in ("Q","K"):
-            if gS.team_state[self.color].castle_rights[castle_dir]:
+            if game.team_state[self.color].castle_rights[castle_dir]:
                 moves.append(Castle(self, castle_dir))
         return moves
-    
+
 class Pawn(Capturable):
     maxMove = 1
     forwardDir:int
@@ -144,24 +138,27 @@ class Pawn(Capturable):
         else:
             self.forward_dir = 1
 
-    def moves(self, b: Board, gS: GameState)-> list[Move]:
+    def __str__(self):
+        return super()._get_letter("p")
+
+    def moves(self, b: Board, game: Game)-> list[Move]:
         moves = []
         y = self.pos.y + self.forward_dir
-        if b.get_square(y, self.pos.x) == None:
+        if 0 <= y < 8 and b.get_square(y, self.pos.x) == None:
             new_pos = Pos(y, self.pos.x)
             if self.PROMOTION_ROW[self.color] == y:
                 for promo_piece_con in self.PROMOTION_PIECES_CONS:
-                    moves.append(Promotion(self, new_pos, None, promo_piece_con(self.color, *new_pos)))
+                    moves.append(Promotion(self, new_pos, None, promo_piece_con(self.color, self.pos.x, y)))
             else:
-                moves.append(NormalMove(self, Pos(y, self.pos.x), None))
-                if self.moved ==0:
-                    y+=self.forward_dir
-                    moves.append(NormalMove(self, Pos(y, self.pos.x), capture=None))
+                moves.append(NormalMove(self, new_pos, None))
+                double_y = y + self.forward_dir
+                if self.moved == 0 and 0 <= double_y < 8 and b.get_square(double_y, self.pos.x) == None:
+                    moves.append(NormalMove(self, Pos(double_y, self.pos.x), capture=None))
 
-        moves += self.attackingMoves(b, gS)
+        moves += self.attackingMoves(b, game)
         return moves
     
-    def attackingMoves(self, b: Board, gS: GameState)->list[Move]:
+    def attackingMoves(self, b: Board, game: Game)->list[Move]:
         moves = []
         y = self.pos.y + self.forward_dir
         for x_attack_dir in self.attackDir:
@@ -171,7 +168,7 @@ class Pawn(Capturable):
 
             end_val = b.get_square(y, x)
             end_pos = Pos(y, x)
-            if gS.is_enPassSq(y, x):
+            if game.is_enPassSq(y, x):
                 y_offset = 1 if self.forward_dir == -1 else -1
                 end_val = b.get_square(y+y_offset, x)
             
@@ -189,13 +186,6 @@ class Pawn(Capturable):
             if self.pos.y + self.forward_dir == end_square.y and self.pos.x + a_dir == end_square.x:
                 return True
         return False
-    
-    def __str__(self):
-        if self.color == "W":
-            return "p"
-        else:
-            return "P"
-
 
 @dataclass(frozen=True)
 class Move(ABC):
@@ -285,10 +275,12 @@ class Castle(Move):
 class Promotion(NormalMove):
     piece: Pawn
     promo_piece: Queen|Knight|Bishop|Rook
+    
     def apply(self, board: Board):
         super().apply(board)
         board.remove_piece(self.piece)
         board.place_piece(self.promo_piece)
+
     def undo(self, board: Board):
         super().undo(board)
         board.remove_piece(self.promo_piece)
