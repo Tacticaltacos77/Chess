@@ -1,19 +1,9 @@
 from pieces import Rook, Bishop, Knight, Pawn, Queen, King, Piece, Pos, Capturable
 from typing import TYPE_CHECKING
 from errors import IllegalBoardStateError
+
 if TYPE_CHECKING:
     from typedef import *
-
-DEFUALT_PIECES: dict[Team,list[Piece]] = {"W":[Pawn("W",6,0), Pawn("W",6,1),Pawn("W",6,2),
-                    Pawn("W",6,3),Pawn("W",6,4),Pawn("W",6,5),Pawn("W",6,6),Pawn("W",6,7),
-                    Rook("W", 7,0),Knight("W", 7,1), Bishop("W",7,2),Queen("W",7,3),
-                    King("W",7,4), Bishop("W",7,5), Knight("W",7,6), Rook("W",7,7)], 
-                    
-                        "B":[Rook("B", 0,0),Knight("B", 0, 1), Bishop("B", 0, 2),
-                    Queen("B", 0, 3), King("B", 0, 4), Bishop("B",0, 5),
-                    Knight("B",0,6), Rook("B",0,7), Pawn("B",1,0), Pawn("B",1,1),
-                    Pawn("B",1,2),Pawn("B",1,3),Pawn("B",1,4),Pawn("B",1,5),
-                    Pawn("B",1,6),Pawn("B",1,7)]}
 
 class Board:
     board: list[list[None|Piece]]

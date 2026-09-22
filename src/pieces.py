@@ -2,9 +2,9 @@ from typing import TYPE_CHECKING, ClassVar
 from typedef import Pos, CastleSquares
 from dataclasses import dataclass, field
 from abc import ABC, abstractmethod
+
 if TYPE_CHECKING:
     from board import Board
-    from game import Game 
     from typedef import *
 
 class Piece:
@@ -13,12 +13,11 @@ class Piece:
     def __init__(self, color: Team, y: int, x: int):
         self.color: Team = color
         self.pos: Pos = Pos(y, x)
-        self.moved = 0
 
     def _get_letter(self, p:str) -> str:
         return p.upper() if self.color =="W" else p.lower()
     
-    def moves(self, b: Board, game: Game)->list[Move]:
+    def moves(self, b: Board)->list[Move]:
         moves = []
         for dir in self.moveDir:
             currMove = self.maxMove
@@ -63,8 +62,6 @@ class Piece:
             raise ValueError()
         self.pos = end_pos
 
-    def has_moved(self)->bool:
-        return self.moved !=0
     
 class Capturable(Piece):
     pass
@@ -116,11 +113,10 @@ class King(Piece):
     def __str__(self):
         return super()._get_letter("k")
         
-    def moves(self, b: Board, game: Game)->list[Move]:
-        moves = super().moves(b, game)
-        for castle_dir in ("Q","K"):
-            if game.team_state[self.color].castle_rights[castle_dir]:
-                moves.append(Castle(self, castle_dir))
+    def moves(self, b: Board)->list[Move]:
+        moves = super().moves(b)
+        moves.append(Castle(self, "K"))
+        moves.append(Castle(self, "Q"))
         return moves
 
 class Pawn(Capturable):
@@ -129,6 +125,7 @@ class Pawn(Capturable):
     attackDir = Pos(-1, 1)
     PROMOTION_PIECES_CONS = (Queen, Rook, Bishop, Knight)
     PROMOTION_ROW = {"W": 0, "B": 7}
+    EN_PASSANT_ROW = {"W": 3, "B": 4}
     
     def __init__(self, color, y, x):
         super().__init__(color, y, x)
@@ -141,38 +138,37 @@ class Pawn(Capturable):
     def __str__(self):
         return super()._get_letter("p")
 
-    def moves(self, b: Board, game: Game)-> list[Move]:
+    def moves(self, b: Board)-> list[Move]:
         moves = []
         y = self.pos.y + self.forward_dir
         if 0 <= y < 8 and b.get_square(y, self.pos.x) == None:
             new_pos = Pos(y, self.pos.x)
             if self.PROMOTION_ROW[self.color] == y:
                 for promo_piece_con in self.PROMOTION_PIECES_CONS:
-                    moves.append(Promotion(self, new_pos, None, promo_piece_con(self.color, self.pos.x, y)))
+                    moves.append(Promotion(self, new_pos, None, promo_piece_con(self.color, y, self.pos.x)))
             else:
                 moves.append(NormalMove(self, new_pos, None))
                 double_y = y + self.forward_dir
                 if self.moved == 0 and 0 <= double_y < 8 and b.get_square(double_y, self.pos.x) == None:
                     moves.append(NormalMove(self, Pos(double_y, self.pos.x), capture=None))
 
-        moves += self.attackingMoves(b, game)
+        moves += self.attackingMoves(b)
         return moves
     
-    def attackingMoves(self, b: Board, game: Game)->list[Move]:
+    def attackingMoves(self, b: Board)->list[Move]:
         moves = []
         y = self.pos.y + self.forward_dir
         for x_attack_dir in self.attackDir:
             x = self.pos.x + x_attack_dir
             if not 0 <= x < 8:
                 continue
-
-            end_val = b.get_square(y, x)
-            end_pos = Pos(y, x)
-            if game.is_enPassSq(y, x):
-                y_offset = 1 if self.forward_dir == -1 else -1
-                end_val = b.get_square(y+y_offset, x)
             
-            if isinstance(end_val, Capturable) and end_val.color !=self.color:
+            end_pos = Pos(y, x)
+            en_pass_val = b.get_square(self.pos.y, x)
+            end_val = b.get_square(y, x)
+            if self.pos.y == self.EN_PASSANT_ROW[self.color] and (isinstance(en_pass_val, Pawn) and en_pass_val.color != self.color):
+                moves.append(EnPassant(self, end_pos, en_pass_val))
+            elif isinstance(end_val, Capturable) and end_val.color !=self.color:
                 if y == self.PROMOTION_ROW[self.color]:
                     for promo_piece_con in self.PROMOTION_PIECES_CONS:
                         moves.append(Promotion(self, end_pos, end_val, promo_piece_con(self.color, *end_pos)))
@@ -198,12 +194,14 @@ class Move(ABC):
     @abstractmethod
     def apply(self, board: Board):
         board.move_piece(self.piece, self.end)
-        self.piece.moved+=1
+        if isinstance(self.piece, (Pawn, King, Rook)):
+            self.piece.moved+=1
 
     @abstractmethod
     def undo(self, board: Board):
         board.move_piece(self.piece, self.start)
-        self.piece.moved-=1
+        if isinstance(self.piece, (Pawn, King, Rook)):
+            self.piece.moved-=1
 
 
 @dataclass(frozen=True)
@@ -214,13 +212,15 @@ class NormalMove(Move):
             board.cap_piece(self.piece, self.end, self.capture)
         else:
             board.move_piece(self.piece, self.end)
-        self.piece.moved+=1
+        if isinstance(self.piece, (Pawn, King, Rook)):
+            self.piece.moved+=1
 
     def undo(self, board: Board):
         board.move_piece(self.piece, self.start)
         if isinstance(self.capture, Capturable):
             board.place_piece(self.capture)
-        self.piece.moved-=1
+        if isinstance(self.piece, (Pawn, King, Rook)):
+            self.piece.moved-=1
 
 
 
@@ -253,22 +253,25 @@ class Castle(Move):
         return self.CASTLE_POS[self.piece.color][self.castle_side]
 
     def apply(self, board: Board):
-        rook = board.get_square(*self.squares().rook_start)
+        super().apply(board)
 
+        rook = board.get_square(*self.squares().rook_start)
         assert isinstance(rook, Rook)
+
         board.move_piece(rook, self.squares().rook_end)
-        board.move_piece(self.piece, self.end)
-        self.piece.moved+=1
         rook.moved+=1
 
     def undo(self, board: Board):
+        super().undo(board)
         rook = board.get_square(*self.squares().rook_end)
 
         assert isinstance(rook, Rook)
         board.move_piece(rook, self.squares().rook_start)
-        board.move_piece(self.piece, self.start)
-        self.piece.moved-=1
         rook.moved-=1
+
+@dataclass(frozen=True)
+class EnPassant(NormalMove):
+    pass
 
 
 @dataclass(frozen=True)
