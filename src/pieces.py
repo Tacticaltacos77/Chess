@@ -29,7 +29,7 @@ class Piece:
                 end_square = b.get_square(y, x)
                 if end_square == None:
                     moves.append(NormalMove(self, Pos(y, x), capture=None))
-                elif isinstance(end_square, Capturable):
+                elif isinstance(end_square, Capturable) and end_square.color != self.color:
                     moves.append(NormalMove(self, Pos(y, x), capture=end_square))
                     break
                 else:
@@ -59,7 +59,7 @@ class Piece:
     
     def set_pos(self, end_pos: Pos):
         if not isinstance(end_pos, Pos):
-            raise ValueError()
+            raise ValueError(f"set_pos expects a Pos, got {type(end_pos)}: {end_pos}")
         self.pos = end_pos
 
     
@@ -126,10 +126,10 @@ class Pawn(Capturable):
     PROMOTION_PIECES_CONS = (Queen, Rook, Bishop, Knight)
     PROMOTION_ROW = {"W": 0, "B": 7}
     EN_PASSANT_ROW = {"W": 3, "B": 4}
+    START_ROW = {"W": 6, "B": 1}
     
     def __init__(self, color, y, x):
         super().__init__(color, y, x)
-        self.moved = 0
         if color == "W":
             self.forward_dir = -1
         else:
@@ -141,7 +141,7 @@ class Pawn(Capturable):
     def moves(self, b: Board)-> list[Move]:
         moves = []
         y = self.pos.y + self.forward_dir
-        if 0 <= y < 8 and b.get_square(y, self.pos.x) == None:
+        if b.get_square(y, self.pos.x) == None:
             new_pos = Pos(y, self.pos.x)
             if self.PROMOTION_ROW[self.color] == y:
                 for promo_piece_con in self.PROMOTION_PIECES_CONS:
@@ -149,7 +149,7 @@ class Pawn(Capturable):
             else:
                 moves.append(NormalMove(self, new_pos, None))
                 double_y = y + self.forward_dir
-                if self.moved == 0 and 0 <= double_y < 8 and b.get_square(double_y, self.pos.x) == None:
+                if self.START_ROW[self.color] == self.pos.y and b.get_square(double_y, self.pos.x) == None:
                     moves.append(NormalMove(self, Pos(double_y, self.pos.x), capture=None))
 
         moves += self.attackingMoves(b)
@@ -183,6 +183,8 @@ class Pawn(Capturable):
                 return True
         return False
 
+PIECE_BY_LETTER: dict[str, type[Piece]] = {"r": Rook, "n": Knight, "b": Bishop, "q": Queen, "k":King, "p": Pawn}
+
 @dataclass(frozen=True)
 class Move(ABC):
     """Parent Class!!! Shouldnt be used on its own!!!"""
@@ -194,13 +196,13 @@ class Move(ABC):
     @abstractmethod
     def apply(self, board: Board):
         board.move_piece(self.piece, self.end)
-        if isinstance(self.piece, (Pawn, King, Rook)):
+        if isinstance(self.piece, (King, Rook)):
             self.piece.moved+=1
 
     @abstractmethod
     def undo(self, board: Board):
         board.move_piece(self.piece, self.start)
-        if isinstance(self.piece, (Pawn, King, Rook)):
+        if isinstance(self.piece, (King, Rook)):
             self.piece.moved-=1
 
 
@@ -212,14 +214,14 @@ class NormalMove(Move):
             board.cap_piece(self.piece, self.end, self.capture)
         else:
             board.move_piece(self.piece, self.end)
-        if isinstance(self.piece, (Pawn, King, Rook)):
+        if isinstance(self.piece, (King, Rook)):
             self.piece.moved+=1
 
     def undo(self, board: Board):
         board.move_piece(self.piece, self.start)
         if isinstance(self.capture, Capturable):
             board.place_piece(self.capture)
-        if isinstance(self.piece, (Pawn, King, Rook)):
+        if isinstance(self.piece, (King, Rook)):
             self.piece.moved-=1
 
 

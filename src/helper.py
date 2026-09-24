@@ -1,9 +1,4 @@
-from typing import TYPE_CHECKING
-
 from typedef import Pos
-
-if TYPE_CHECKING:
-    from pieces import Piece
 
 FILES = "abcdefgh"
 
@@ -19,5 +14,5 @@ def to_pos(square: str) -> Pos:
     """'a8' -> Pos(0, 0), 'h1' -> Pos(7, 7)."""
     square = square.strip().lower()
     if len(square) != 2 or square[0] not in FILES or square[1] not in "12345678":
-        raise ValueError(f"{square!r} is not a square name")
+        raise ValueError(f"{square} is not a square name")
     return Pos(8 - int(square[1]), FILES.index(square[0]))
