@@ -35,13 +35,6 @@ class Board:
         if not (0 <= y < 8 and 0 <= x < 8):
             return None
         return self.board[y][x]
-
-    def get_piece(self, p: Piece) -> Piece:
-        board_val = self.board[p.pos.y][p.pos.x]
-        if not isinstance(board_val, Piece):
-            ####
-            raise IllegalBoardStateError("Epected a piece at ")
-        return board_val
     
     def set_board(self, both_team_pieces: list[Piece]):
         self.board = [[None, None, None, None, None, None, None, None],
@@ -74,12 +67,13 @@ class Board:
             raise IllegalBoardStateError(f"{p} tried to capture {cap_p} which is the same color")
 
         if not isinstance(cap_p, Capturable):
-            raise IllegalBoardStateError("")
-             
+            raise IllegalBoardStateError(f"{p} tried to capture {cap_p}, which is not capturable")
+
         cap_piece_v = self.remove_piece(cap_p)
-        
+
         if cap_piece_v != cap_p:
-            raise IllegalBoardStateError("")
+            raise IllegalBoardStateError(f"expected to remove {cap_p} from ({cap_p.pos.y}, {cap_p.pos.x}), "
+                                         f"but removed {cap_piece_v}")
         
         self.remove_piece(p)
         p.set_pos(end)
