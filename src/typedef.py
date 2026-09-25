@@ -12,7 +12,8 @@ type Sides[T] = dict[Side, T]
 type Teams[T] = dict[Team, T]
 """A container for both of the teams"""
 type CastleRights = Teams[dict[Side, bool]]
-
+""""""
+type SquareColor = Literal["light", "dark"]
 
 type GameStatus = Literal["in_progress", "checkmate", "stalemate", "draw_50_move", "draw_repetion", "draw_insufficent_material"]
 

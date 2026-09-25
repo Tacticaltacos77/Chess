@@ -59,7 +59,7 @@ class Piece:
     
     def set_pos(self, end_pos: Pos):
         if not isinstance(end_pos, Pos):
-            raise ValueError(f"set_pos expects a Pos, got {type(end_pos)}: {end_pos}")
+            raise ValueError(f"set_pos expects a Pos, got {type(end_pos).__name__}: {end_pos}")
         self.pos = end_pos
 
     

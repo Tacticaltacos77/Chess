@@ -1,4 +1,4 @@
-from typedef import Pos
+from typedef import Pos, SquareColor
 
 FILES = "abcdefgh"
 
@@ -16,3 +16,7 @@ def to_pos(square: str) -> Pos:
     if len(square) != 2 or square[0] not in FILES or square[1] not in "12345678":
         raise ValueError(f"{square} is not a square name")
     return Pos(8 - int(square[1]), FILES.index(square[0]))
+
+def get_square_color(pos: Pos) -> SquareColor:
+    v = (pos.y + pos.x) % 2
+    return "light" if v ==0 else "dark"

@@ -1,4 +1,4 @@
-from pieces import Rook, Bishop, Knight, Pawn, Queen, King, Piece, Pos, Capturable
+from pieces import Piece, Pos, Capturable
 from typing import TYPE_CHECKING
 from errors import IllegalBoardStateError
 

@@ -5,7 +5,7 @@ from pieces import *
 from collections import defaultdict
 from enum import StrEnum
 from fen import Fen, DEFAULT_FEN
-from helper import to_square
+from helper import to_square, get_square_color
 from typedef import *
 
 
@@ -144,7 +144,7 @@ class Game:
         return self.get_valid_moves(current_turn_all_moves)
         
     def check_move_valid(self, move: Move):
-       return move in self.curr_turn_moves
+       return move in self.curr_turn_moves[move.start]
 
     def _add_en_passant(self, move: Move) -> None:
         if type(move.piece) ==Pawn and abs(move.start.y - move.end.y) ==2:
@@ -155,7 +155,7 @@ class Game:
     
     def king_in_check(self, king: King) -> bool:
         if type(king) != King:
-            raise TypeError(f"king_in_check expects a King, got {type(king)}")
+            raise TypeError(f"king_in_check expects a King, got {type(king).__name__}")
         color_p = king.color
         opp_pieces = self.team_state[self.get_other_color(color_p)].pieces
         for p in opp_pieces:
@@ -256,16 +256,20 @@ class Game:
         self.status = self.compute_gamestate_status()
 
     def check_sufficient_material(self) -> bool:
-        piece_counter = defaultdict(int)
-
+        minor_pieces: list[Piece] = []
         for t in TEAMS:
             for p in self.team_state[t].pieces:
-                piece_counter[str(p)] +=1
+                if isinstance(p, (Pawn, Rook, Queen)):
+                    return True
+                if not isinstance(p, King):
+                    minor_pieces.append(p)
+
+        if len(minor_pieces) <=1:
+            return False
         
-        total_pawns = piece_counter["P"] + piece_counter["p"]
-        if total_pawns > 0:
-            return True
-            
+        first_square_color = get_square_color(minor_pieces[0].pos)
+        if all(isinstance(p, Bishop) and first_square_color==get_square_color(p.pos) for p in minor_pieces):
+            return False
 
         return True
 
