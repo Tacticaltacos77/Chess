@@ -2,7 +2,7 @@ from typing import TYPE_CHECKING, ClassVar
 from typedef import Pos, CastleSquares
 from dataclasses import dataclass, field
 from abc import ABC, abstractmethod
-
+from helper import to_square
 if TYPE_CHECKING:
     from board import Board
     from typedef import *
@@ -193,6 +193,11 @@ class Move(ABC):
     start: Pos = field(init=False)
     def __post_init__(self):
         object.__setattr__(self, "start", self.piece.pos)
+
+    @abstractmethod
+    def __str__(self) -> str:
+        pass
+    
     @abstractmethod
     def apply(self, board: Board):
         board.move_piece(self.piece, self.end)
@@ -209,6 +214,12 @@ class Move(ABC):
 @dataclass(frozen=True)
 class NormalMove(Move):
     capture: Capturable | None 
+
+    def __str__(self) -> str:
+        piece = str(self.piece).lower() if isinstance(self.piece, Pawn) else str(self.piece).title() 
+        move = piece + f"{to_square(self.start)}{"x" if self.capture else "-"}{to_square(self.end)}" 
+        return move
+
     def apply(self, board: Board):
         if isinstance(self.capture, Capturable):
             board.cap_piece(self.piece, self.end, self.capture)
@@ -251,6 +262,12 @@ class Castle(Move):
         super().__post_init__()
         object.__setattr__(self, "end", self.squares().king_end)
 
+    def __str__(self) -> str:
+        if self.castle_side =="K":
+            return "O-O"
+        else:
+            return "O-O-O"
+    
     def squares(self) -> CastleSquares:
         return self.CASTLE_POS[self.piece.color][self.castle_side]
 
@@ -280,6 +297,9 @@ class EnPassant(NormalMove):
 class Promotion(NormalMove):
     piece: Pawn
     promo_piece: Queen|Knight|Bishop|Rook
+    
+    def __str__(self) -> str:
+        return super().__str__() + f"={str(self.promo_piece).upper()}"
     
     def apply(self, board: Board):
         super().apply(board)
