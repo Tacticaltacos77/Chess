@@ -155,7 +155,7 @@ class Pawn(Capturable):
         moves += self.attackingMoves(b)
         return moves
     
-    def attackingMoves(self, b: Board)->list[Move]:
+    def attackingMoves(self, b: Board) -> list[Move]:
         moves = []
         y = self.pos.y + self.forward_dir
         for x_attack_dir in self.attackDir:
@@ -168,7 +168,7 @@ class Pawn(Capturable):
             end_val = b.get_square(y, x)
             if self.pos.y == self.EN_PASSANT_ROW[self.color] and (isinstance(en_pass_val, Pawn) and en_pass_val.color != self.color):
                 moves.append(EnPassant(self, end_pos, en_pass_val))
-            elif isinstance(end_val, Capturable) and end_val.color !=self.color:
+            if isinstance(end_val, Capturable) and end_val.color !=self.color:
                 if y == self.PROMOTION_ROW[self.color]:
                     for promo_piece_con in self.PROMOTION_PIECES_CONS:
                         moves.append(Promotion(self, end_pos, end_val, promo_piece_con(self.color, *end_pos)))
@@ -177,7 +177,7 @@ class Pawn(Capturable):
 
         return moves
     
-    def isAttacking(self, end_square: Pos, b: Board)->bool:
+    def isAttacking(self, end_square: Pos, b: Board) -> bool:
         for a_dir in self.attackDir:
             if self.pos.y + self.forward_dir == end_square.y and self.pos.x + a_dir == end_square.x:
                 return True
@@ -307,6 +307,6 @@ class Promotion(NormalMove):
         board.place_piece(self.promo_piece)
 
     def undo(self, board: Board):
-        super().undo(board)
         board.remove_piece(self.promo_piece)
         board.place_piece(self.piece)
+        super().undo(board)
