@@ -4,14 +4,12 @@ from errors import InvalidFenError
 from helper import to_square, to_pos
 from typedef import *
 
-
-FILE = "abcdefgh"
 KING_START_X = 4
 
 class Fen:
     placement: list[tuple[str, Pos]]
     turn: Team
-    castle_rights: set[str]
+    castle_rights: set[Side]
     en_passant: Pos | None
     half_turn: int 
     full_turn: int
@@ -79,13 +77,12 @@ class Fen:
                 raise InvalidFenError(f"{castle} is not a castling field, expected up to 4 unique rights or '-'")
             
             for c in castle:
-                if c.upper() not in SIDES:
+                if c not in Castle.CASTLE_POS:
                     raise InvalidFenError(f"{c} is not a castling right, expected one of 'KQkq'")
                 # Verify Leagality
                 team: Team = "W" if c.isupper() else "B"
-                side: Side = "K" if c.upper() == "K" else "Q"
 
-                rook_start = Castle.CASTLE_POS[team][side].rook_start
+                rook_start = Castle.CASTLE_POS[c].rook_start
                 king_letter = "K" if team == "W" else "k"
                 rook_letter = "R" if team == "W" else "r"
 
@@ -145,14 +142,45 @@ class Fen:
 
             # Sets the moved flag based on rights
             if isinstance(piece, Rook):
-                side = "K" if pos.x == 7 else "Q"
-                rights = side if color == "W" else side.lower()
-                if pos != Castle.CASTLE_POS[color][side].rook_start or rights not in self.castle_rights:
-                    piece.moved = 1 
+                if not any(Castle.CASTLE_POS[side].rook_start == pos for side in self.castle_rights):
+                    piece.moved = 1
                 
             pieces.append(piece)
         return pieces
-    
 
+    @staticmethod
+    def to_fen(grid: list[list[None|Piece]], turn: Team, castle_rights: set, en_passant: Pos|None, half_turn: int, full_turn: int) -> str:
+        position = []
+        for r_i in range(8):
+            empty_count = 0
+            for c in grid[r_i]:
+                if c == None:
+                    empty_count+=1
+                else:
+                    if empty_count!=0:
+                        position.append(str(empty_count))
+                        empty_count = 0
+                    position.append(str(c))
 
+            if empty_count !=0:
+                position.append(str(empty_count))
+            if r_i!=7:
+                position.append("/")
+
+        castle_rights_str = "-"
+        if castle_rights:
+            castle_rights_str = ""
+            for t in TEAMS:
+                for s in SIDES:
+                    side = s if t == "W" else s.lower()
+                    if side in castle_rights:
+                        castle_rights_str+= side
+
+        en_passant_str = "-"
+        if en_passant:
+            en_passant_str = to_square(en_passant)
+            
+        return f"{"".join(position)} {turn.lower()} {castle_rights_str} {en_passant_str} {half_turn} {full_turn}"
+
+        
 DEFAULT_FEN = Fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
