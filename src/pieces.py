@@ -115,8 +115,9 @@ class King(Piece):
         
     def moves(self, b: Board)->list[Move]:
         moves = super().moves(b)
-        moves.append(Castle(self, "K"))
-        moves.append(Castle(self, "Q"))
+        k_side, q_side = ("K", "Q") if self.color == "W" else ("k", "q")
+        moves.append(Castle(self, k_side))
+        moves.append(Castle(self, q_side))
         return moves
 
 class Pawn(Capturable):
@@ -237,24 +238,21 @@ class NormalMove(Move):
 
 
 
-def _get_castle_squares(color: str) -> Sides[CastleSquares]:
-    if color =="W":
-        row = 7
-    else:
-        row = 0
-    return {
-        "Q": CastleSquares(rook_start=Pos(row,0), rook_end=Pos(row,3), king_end=Pos(row,2),
-                           must_be_empty=(Pos(row,3), Pos(row,2), Pos(row,1)),
-                           must_be_unattacked=(Pos(row,4), Pos(row,3), Pos(row,2))),
-        "K": CastleSquares(rook_start=Pos(row,7), rook_end=Pos(row,5), king_end=Pos(row,6),
+def _get_castle_squares() -> Sides[CastleSquares]:
+    castle_squares = {}
+    for k_side, q_side, row in (("K", "Q", 7), ("k", "q", 0)):
+        castle_squares[k_side] = CastleSquares(rook_start=Pos(row,7), rook_end=Pos(row,5), king_end=Pos(row,6),
                            must_be_empty=(Pos(row,5), Pos(row,6)),
-                           must_be_unattacked=(Pos(row,4), Pos(row,5), Pos(row,6))),
-    }
+                           must_be_unattacked=(Pos(row,4), Pos(row,5), Pos(row,6)))
+        castle_squares[q_side] = CastleSquares(rook_start=Pos(row,0), rook_end=Pos(row,3), king_end=Pos(row,2),
+                           must_be_empty=(Pos(row,3), Pos(row,2), Pos(row,1)),
+                           must_be_unattacked=(Pos(row,4), Pos(row,3), Pos(row,2)))
+    
+    return castle_squares
 
 @dataclass(frozen=True)
 class Castle(Move):
-    CASTLE_POS: ClassVar[Teams[Sides[CastleSquares]]] = {"W": _get_castle_squares("W"),
-                                                         "B": _get_castle_squares("B")}
+    CASTLE_POS: ClassVar[Sides[CastleSquares]] = _get_castle_squares()
     piece: King
     castle_side: Side
     end: Pos = field(init=False)
@@ -263,13 +261,13 @@ class Castle(Move):
         object.__setattr__(self, "end", self.squares().king_end)
 
     def __str__(self) -> str:
-        if self.castle_side =="K":
+        if self.castle_side.upper() =="K":
             return "O-O"
         else:
             return "O-O-O"
     
     def squares(self) -> CastleSquares:
-        return self.CASTLE_POS[self.piece.color][self.castle_side]
+        return self.CASTLE_POS[self.castle_side]
 
     def apply(self, board: Board):
         super().apply(board)

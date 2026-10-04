@@ -6,15 +6,15 @@ if TYPE_CHECKING:
     from typedef import *
 
 class Board:
-    board: list[list[None|Piece]]
-    def __init__(self, pieces: list[Piece]):
-        self.set_board(pieces)
+    grid: list[list[None|Piece]]
+    def __init__(self, all_pieces: list[Piece]):
+        self.set_board(all_pieces)
         
     def __str__(self):
         board = []
         for y in range(8):
             for x in range(8):
-                board.append(str(self.board[y][x]))
+                board.append(str(self.grid[y][x]))
                 if x!=7:
                     board.append(" ")
             if y!=7:
@@ -25,7 +25,7 @@ class Board:
         board = [[] for _ in range(8)]
         for y in range(8):
             for x in range(8):
-                v = self.board[y][x]
+                v = self.grid[y][x]
                 if not v:
                     v = ""
                 board[y].append(str(v))
@@ -34,10 +34,26 @@ class Board:
     def get_square(self, y: int, x: int) -> Piece|None:
         if not (0 <= y < 8 and 0 <= x < 8):
             return None
-        return self.board[y][x]
-    
-    def set_board(self, both_team_pieces: list[Piece]):
-        self.board = [[None, None, None, None, None, None, None, None],
+        return self.grid[y][x]
+
+    def get_piece(self, y: int, x: int) -> Piece:
+        if not (0 <= y < 8 and 0 <= x < 8):
+            raise ValueError()
+        piece = self.grid[y][x]
+        if not isinstance(piece, Piece):
+            raise IllegalBoardStateError()
+        return piece
+
+    def get_pieces(self, color: Team | None = None) -> list[Piece]:
+        pieces = []
+        for row in self.grid:
+            for p in row:
+                if p and (p.color == color or not color):
+                    pieces.append(p)
+        return pieces
+
+    def set_board(self, all_pieces: list[Piece]):
+        self.grid = [[None, None, None, None, None, None, None, None],
                       [None, None, None, None, None, None, None, None],
                       [None, None, None, None, None, None, None, None], 
                       [None, None, None, None, None, None, None, None],
@@ -46,14 +62,14 @@ class Board:
                       [None, None, None, None, None, None, None, None],
                       [None, None, None, None, None, None, None, None]]
         
-        for piece in both_team_pieces:
+        for piece in all_pieces:
             self.place_piece(piece)
     
     def place_piece(self, p: Piece) -> None:
         end_square_val = self.get_square(p.pos.y, p.pos.x)
         if end_square_val:
             raise IllegalBoardStateError(f"Tried to place {p} at ({p.pos}), but there was {end_square_val} already there")
-        self.board[p.pos.y][p.pos.x] = p
+        self.grid[p.pos.y][p.pos.x] = p
 
 
     def move_piece(self, p:Piece, end:Pos)->None:
@@ -81,10 +97,10 @@ class Board:
         return cap_p
     
     def remove_piece(self, p: Piece)->Piece:
-        rmv_p = self.board[p.pos.y][p.pos.x]
+        rmv_p = self.get_piece(p.pos.y, p.pos.x)
         if not isinstance(rmv_p, Piece):
             raise IllegalBoardStateError(f"Tried to remove {p}, from ({p.pos.y, p.pos.x}), but there was {rmv_p} was there instead")
         
-        self.board[p.pos.y][p.pos.x] = None
+        self.grid[p.pos.y][p.pos.x] = None
         return rmv_p
 

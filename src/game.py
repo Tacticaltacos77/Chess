@@ -19,75 +19,17 @@ class Status(StrEnum):
     DRAW_INSUFFICIENT_MATERIAL = "draw insufficient material"
 
 
-class TeamState:
-    color: Team
-    king: King
-    pieces: list[Piece]
-    lost_pieces: list[Piece]
-    castle_rights: set[Side]
-
-    def __init__(self, pieces: list[Piece], color: Team, castle_rights: set):
-        self.color = color
-        self.pieces = pieces
-        self.lost_pieces = []
-        self.castle_rights = castle_rights
-        if len(castle_rights) > len(SIDES):
-            raise IllegalGameStateError(f"{color} has {len(castle_rights)} castle rights, expected at most {len(SIDES)}")
-
-        for side in castle_rights:
-            if side not in SIDES:
-                raise IllegalGameStateError(f"{side} is not a castle side, expected one of {SIDES}")
-
-        king_count = 0
-        for p in pieces:
-            if p.color != self.color:
-                raise IllegalGameStateError(f"{p} is {p.color}, but it was given to the {color} team")
-            if isinstance(p, King):
-                self.king = p
-                king_count+=1
-        if king_count!=1:
-            raise IllegalGameStateError(f"expected exactly 1 {color} king, got {king_count}")
-        
-    def refresh_castle_rights(self, board: Board) -> None:
-        if self.king.moved !=0:
-            self.castle_rights.discard("K")
-            self.castle_rights.discard("Q")
-            return
-        
-        for side in SIDES:
-            rook_start = Castle.CASTLE_POS[self.color][side].rook_start
-            rook = board.get_square(*rook_start)
-
-            if isinstance(rook, Rook) and rook.moved ==0 and rook.color == self.color:
-                self.castle_rights.add(side)
-            else:
-                self.castle_rights.discard(side)
-
-    def lose_piece(self, piece: Piece):
-        self.pieces.remove(piece)
-        self.lost_pieces.append(piece)
-
-    def regain_piece(self, piece: Piece):
-        self.lost_pieces.remove(piece)
-
-    def promote_piece(self, pawn: Pawn, piece: Piece):
-        self.pieces.remove(pawn)
-        self.pieces.append(piece)
-
-    def demote_piece(self, pawn: Pawn, piece: Piece):
-        self.pieces.remove(piece)
-        self.pieces.append(pawn)
-
 class Game:
     full_turn: int
     color_turn: Team
     half_turn_history: list[int]
-    curr_turn_moves: defaultdict[Pos, list[Move]] 
     move_history: list[Move]
+    allowed_moves_history: list[dict]
     enPassentHistory:list[None|Pos]
-    team_state:dict[Team,TeamState] 
+    castle_rights: set
+    kings: Teams[King]
     board: Board
-    postitions: defaultdict[str, int]
+    positions: defaultdict[str, int]
     status: Status
 
     def __init__(self, fen: str):
@@ -99,30 +41,50 @@ class Game:
         self.enPassentHistory = [f.en_passant]
         pieces = f.build_pieces()
         self.board = Board(pieces)
-        self.team_state = self._create_teams_states(pieces, f.castle_rights)
-        self.postitions = defaultdict(int)
+        self.castle_rights = f.castle_rights
+        self.lost_pieces = {"W": [], "B": []}
+        self.kings = self._find_kings(pieces)
+        self.positions = defaultdict(int)
         self.update_castle_vars()
-        self.curr_turn_moves = self.compute_curr_turn_moves()
+        self.allowed_moves_history = [self.compute_curr_turn_moves()]
         self.status = self.compute_gamestate_status()
+        self.positions[self.get_fen().rsplit(" ", 2)[0]] = 1
 
-    def _create_teams_states(self, pieces: list[Piece], castle_rights: set[str]) -> dict[Team, TeamState]:
-        white_pieces, black_pieces = [], []
-        for p in pieces:
-            if p.color =="W":
-                white_pieces.append(p)
-            elif p.color == "B":
-                black_pieces.append(p)
-            else:
-                raise IllegalGameStateError(f"{p} on {to_square(p.pos)} has color {p.color}, expected one of {TEAMS}")
+    def get_fen(self) -> str:
+        ep = self.enPassentHistory[-1]
+        half_turn = self.half_turn_history[-1]
+        return Fen.to_fen(self.board.grid, self.color_turn, self.castle_rights, ep, half_turn, self.full_turn)
+
+    def _get_position(self) -> str:
+        # Positions shouldn't include the en passant in it unless the en passant pawn is actually
+        # capturable because then it is actually a different position
+        ep = self.enPassentHistory[-1]
+        if ep:
+            opp_pieces = self.board.get_pieces(self.get_other_color(self.color_turn))
+            for p in opp_pieces:
+                if isinstance(p, Pawn) and p.isAttacking(ep, self.board):
+                    return self.get_fen().rsplit(" ", 2)[0]
             
-        white_rights, black_rights = set(), set()
-        for side in SIDES:
-            if side in castle_rights:
-                white_rights.add(side)
-            if side.lower() in castle_rights:
-                black_rights.add(side)
+        return self.get_fen().rsplit(" ", 3)[0] +" -"
 
-        return {"W": TeamState(white_pieces, "W", white_rights), "B": TeamState(black_pieces, "B", black_rights)}
+    def _find_kings(self, pieces) -> Teams[King]:
+        w_kings = []
+        b_kings = []
+
+        for p in pieces:
+            if isinstance(p, King):
+                if p.color == "W":
+                    w_kings.append(p)
+                else:
+                    b_kings.append(p)
+
+        if len(w_kings) != 1 or len(b_kings) !=1:
+            raise IllegalGameStateError(f"must be one king for each side. W: {len(w_kings)}, B: {len(b_kings)}")
+        
+        return {"W": w_kings[0], "B": b_kings[0]}
+    
+    def get_curr_turn_moves(self):
+        return self.allowed_moves_history[-1]
     
     def get_other_color(self, color:Team) -> Team:
         if color =="W":
@@ -133,7 +95,7 @@ class Game:
         return self.enPassentHistory[-1] == Pos(y, x)
     
     def compute_all_moves(self) -> dict[Pos, list[Move]]:
-        pieces = self.team_state[self.color_turn].pieces
+        pieces = self.board.get_pieces(self.color_turn)
         moves: dict[Pos, list[Move]] = {}
         for p in pieces:
             moves[p.pos] = p.moves(self.board)
@@ -144,7 +106,7 @@ class Game:
         return self.get_valid_moves(current_turn_all_moves)
         
     def check_move_valid(self, move: Move):
-       return move in self.curr_turn_moves[move.start]
+       return move in self.allowed_moves_history[-1][move.start]
 
     def _add_en_passant(self, move: Move) -> None:
         if type(move.piece) ==Pawn and abs(move.start.y - move.end.y) ==2:
@@ -157,7 +119,7 @@ class Game:
         if type(king) != King:
             raise TypeError(f"king_in_check expects a King, got {type(king).__name__}")
         color_p = king.color
-        opp_pieces = self.team_state[self.get_other_color(color_p)].pieces
+        opp_pieces = self.board.get_pieces(self.get_other_color(color_p))
         for p in opp_pieces:
             if p.isAttacking(king.pos, self.board):
                 return True
@@ -165,7 +127,6 @@ class Game:
     
     def get_valid_moves(self, all_moves: dict[Pos, list[Move]]) -> defaultdict[Pos, list[Move]]:
         legal_moves: dict[Pos, list[Move]] = defaultdict(list)
-        king = self.team_state[self.color_turn].king
         for p in all_moves:
             for m in all_moves[p]:
                 if type(m)==Castle and self._validate_castle(m):
@@ -174,18 +135,17 @@ class Game:
                     if isinstance(m, EnPassant) and not self._is_en_pass_sq(*m.end):
                         continue
                     m.apply(self.board)
-                    if not self.king_in_check(king):
+                    if not self.king_in_check(self.kings[self.color_turn]):
                         legal_moves[p].append(m)
                     m.undo(self.board)
         return legal_moves
     
     def _validate_castle(self, castle: Castle) -> bool:
         king = castle.piece
-        ts = self.team_state[king.color]
-        if self.king_in_check(king) or king.moved != 0 or castle.castle_side not in ts.castle_rights:
+        if self.king_in_check(king) or king.moved != 0 or castle.castle_side not in self.castle_rights:
             return False
         p = castle.piece
-        opp_pieces = self.team_state[self.get_other_color(p.color)].pieces
+        opp_pieces = self.board.get_pieces(self.get_other_color(p.color))
         castle_squares = castle.squares()
 
         for pos in castle_squares.must_be_unattacked:
@@ -199,8 +159,14 @@ class Game:
         return True
 
     def update_castle_vars(self) -> None:
-        self.team_state["W"].refresh_castle_rights(self.board)
-        self.team_state["B"].refresh_castle_rights(self.board)
+        for side, squares in Castle.CASTLE_POS.items():
+            color = "W" if side.isupper() else "B"
+            rook = self.board.get_square(*squares.rook_start)
+
+            if self.kings[color].moved == 0 and isinstance(rook, Rook) and rook.moved == 0 and rook.color == color:
+                self.castle_rights.add(side)
+            else:
+                self.castle_rights.discard(side)
 
     def make_move(self, move: Move) -> None:
         if not self.check_move_valid(move):
@@ -216,15 +182,12 @@ class Game:
         
         if isinstance(move, NormalMove) and move.capture:
             half_turn = 0
-            self.team_state[move.capture.color].lose_piece(move.capture)
-        
-        if isinstance(move, Promotion):
-            self.team_state[move.piece.color].promote_piece(move.piece, move.promo_piece)
 
         if isinstance(move.piece, Pawn):
             half_turn = 0
         self.half_turn_history.append(half_turn)
-
+        self.move_history.append(move)
+        
         self._add_en_passant(move)
         self.update_castle_vars()
 
@@ -232,19 +195,25 @@ class Game:
 
         if self.color_turn == "W":
             self.full_turn+=1
-        self.curr_turn_moves = self.compute_curr_turn_moves()
+
+        position = self._get_position() 
+        self.positions[position] +=1
+
+        self.allowed_moves_history.append(self.compute_curr_turn_moves())
+        self.status = self.compute_gamestate_status(position)
+
 
     def undo_move(self) -> None:
         if not self.move_history:
             return
+        position = self._get_position()
+        self.positions[position] -=1
+        if self.positions[position] == 0:
+            self.positions.pop(position)
         move = self.move_history.pop()
         move.undo(self.board)
-        if isinstance(move, NormalMove) and move.capture:
-            self.team_state[move.capture.color].regain_piece(move.capture)
-        if isinstance(move, Promotion):
-            self.team_state[move.piece.color].demote_piece(move.piece, move.promo_piece)
 
-        self.half_turn = self.half_turn_history.pop
+        self.half_turn_history.pop()
         self.enPassentHistory.pop()
         self.update_castle_vars()
 
@@ -252,13 +221,13 @@ class Game:
         if self.color_turn == "B":
             self.full_turn-=1
             
-        self.curr_turn_moves = self.compute_curr_turn_moves()
+        self.allowed_moves_history.pop()
         self.status = self.compute_gamestate_status()
 
     def check_sufficient_material(self) -> bool:
         minor_pieces: list[Piece] = []
         for t in TEAMS:
-            for p in self.team_state[t].pieces:
+            for p in self.board.get_pieces(t):
                 if isinstance(p, (Pawn, Rook, Queen)):
                     return True
                 if not isinstance(p, King):
@@ -273,21 +242,21 @@ class Game:
 
         return True
 
-    def compute_gamestate_status(self) -> Status:
+    def compute_gamestate_status(self, last_position:str|None = None) -> Status:
         """Designed to be called at the start of turns"""
-        if not self.curr_turn_moves:
+        if not self.allowed_moves_history[-1]:
             c = self.color_turn
-            team = self.team_state[c]
-            if self.king_in_check(team.king):
+            if self.king_in_check(self.kings[self.color_turn]):
                 if c =="W":
                     return Status.BLACK_CHECKMATE
                 else:
                     return Status.WHITE_CHECKMATE
             else:
                 return Status.STALEMATE
-        elif not self.check_sufficient_material():
+        if not self.check_sufficient_material():
             return Status.DRAW_INSUFFICIENT_MATERIAL
-        elif self.half_turn_history[-1] >= 100:
+        if self.half_turn_history[-1] >= 100:
             return Status.DRAW_FIFTY_MOVE
-        
+        if last_position and self.positions[last_position] == 3:
+            return Status.DRAW_REPETITION
         return Status.ACTIVE

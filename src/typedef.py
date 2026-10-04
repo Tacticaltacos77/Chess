@@ -4,7 +4,7 @@ from typing import Literal, NamedTuple
 ## Redo to be enums
 type Team = Literal["W", "B"]
 """Team Colors"""
-type Side = Literal["K", "Q"] 
+type Side = Literal["K", "Q", "k", "q"] 
 """Sides of the chess board"""
 
 type Sides[T] = dict[Side, T]
