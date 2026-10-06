@@ -14,7 +14,7 @@ I built this project because I enjoy chess and wanted a challenging way to pract
 
 ## Installation
 
-Requires Python 3.12 or newer.
+Requires Python 3.14 or newer.
 
 Clone the repository and install the project:
 
@@ -84,23 +84,9 @@ Move strings use the piece, starting square, move type, and ending square:
 | Promotion | `pe7-e8=Q` |
 | Castling | `O-O`, `O-O-O` |
 
-### Getting legal moves
-
-Legal moves for the current turn can also be accessed directly:
-
-```python
-game = Game()
-
-for moves in game.get_curr_turn_moves().values():
-    for move in moves:
-        print(move)
-```
-
-Each legal move is represented as a `Move` object that can be passed directly into `Game.make_move()`.
-
 ### Loading positions with FEN
 
-A game can be initialized from any valid FEN position:
+A game can be initialized from a FEN position:
 
 ```python
 from chesslibrary import Game
@@ -145,7 +131,7 @@ This keeps basic piece movement separate from rules that depend on the state of 
 
 Checking whether a move is legal requires temporarily applying the move to the board and checking the position to see if the king is in check or not.
 
-Using the full `Game.make_move()` process for every potential move would unnecessarily update the current turn allowed moves, repetition history, en passant state, castling rights, and other persistent game data which would make it much slower.
+Using the full `Game.make_move()` process for every potential move would unnecessarily update the current leagal moves(cause a loop as well), repetition history, en passant state, castling rights, and other game data.
 
 Moves therefore support lightweight `apply()` and `undo()` directly against the board. 
 
@@ -167,26 +153,6 @@ This reduced duplicated movement logic and made the rules easier to maintain.
 
 ## Challenges
 
-### Separating move generation from legal move validation
-
-One of the harder design problems was deciding where move legality should be handled.
-
-A piece can determine how it is allowed to move, but it cannot determine whether that move is legal for the current game by itself. For example, a rook may be able to move to a square based on its movement rules, but the move still cannot be played if it leaves its own king in check.
-
-Earlier versions mixed more of this logic together. I eventually separated the two steps: pieces generate possible moves, and the `Game` layer filters them based on the current game state.
-
-This made the responsibilities of each layer clearer and made it easier to test piece movement separately from full chess rules.
-
-### Applying moves without changing the full game state
-
-Legal move validation requires temporarily making a move and checking the resulting position.
-
-At first, it seemed natural to use the same move process everywhere. The problem is that a real game move updates much more than the board. It changes things such as turn state, en passant, castling rights, repetition history, move counters, and the list of legal moves.
-
-Doing all of that just to test every possible move would add unnecessary work and make temporary move checking much harder to reason about.
-
-I ended up separating the lower level board change from the full game update. Move objects can apply and undo themselves directly on the board, while `Game.make_move()` handles the additional state that should only change when an actual move is played.
-
 ### Making moves fully reversible
 
 Adding undo support became more complicated than simply moving a piece back to its original square.
@@ -195,7 +161,7 @@ Captures need to restore the captured piece, promotions replace one piece with a
 
 This became especially important once I wanted the library to support future engine searching, where many moves may be made and undone while exploring positions.
 
-The final design keeps the information needed to reverse board changes on the move objects while the `Game` keeps the history needed to restore the rest of the game state.
+Move objects keep what they need to reverse board changes, while the `Game` keeps the history needed to restore the rest of the game state.
 
 ### Handling rule interactions and edge cases
 
@@ -233,8 +199,11 @@ For the standard starting position, the library currently verifies:
 | 2 | 400 |
 | 3 | 8,902 |
 | 4 | 197,281 |
+| 5 | 4865609 |
+| 6 | 119060324 |
 
 These tests help catch errors in move generation that may only appear several moves into a position.
+The last two can take an absurd amount of time in their current state.
 
 ## Roadmap
 

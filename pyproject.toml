@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "chesslibrary"
 version = "0.1.0"
-description = "A Python chess library that plays by chess.com rules"
+description = "A Python chess library with game rules modeled after Chess.com"
 requires-python = ">=3.14"
 
 [tool.pytest.ini_options]
