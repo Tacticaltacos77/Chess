@@ -1,11 +1,11 @@
 from typing import TYPE_CHECKING, ClassVar
-from typedef import Pos, CastleSquares
+from .typedef import Pos, CastleSquares
 from dataclasses import dataclass, field
 from abc import ABC, abstractmethod
-from helper import to_square
+from .helper import to_square
 if TYPE_CHECKING:
-    from board import Board
-    from typedef import *
+    from .board import Board
+    from .typedef import *
 
 class Piece:
     moveDir: tuple[Pos, ...]
@@ -188,7 +188,6 @@ PIECE_BY_LETTER: dict[str, type[Piece]] = {"r": Rook, "n": Knight, "b": Bishop, 
 
 @dataclass(frozen=True)
 class Move(ABC):
-    """Parent Class!!! Shouldnt be used on its own!!!"""
     piece: Piece
     end: Pos
     start: Pos = field(init=False)

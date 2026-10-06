@@ -1,4 +1,7 @@
-from typedef import Pos, SquareColor
+from typing import TYPE_CHECKING
+from .typedef import Pos, SquareColor
+if TYPE_CHECKING:
+    from .pieces import Move
 
 FILES = "abcdefgh"
 
@@ -16,6 +19,15 @@ def to_pos(square: str) -> Pos:
     if len(square) != 2 or square[0] not in FILES or square[1] not in "12345678":
         raise ValueError(f"{square} is not a square name")
     return Pos(8 - int(square[1]), FILES.index(square[0]))
+
+def to_move(move: str, moves: dict[Pos, list[Move]]) -> Move:
+    """'pe2-e4', 'Ng8xf6', 'pe7-e8=Q', 'O-O' -> the matching legal Move from moves."""
+    move = move.strip()
+    for move_list in moves.values():
+        for m in move_list:
+            if str(m) == move:
+                return m
+    raise ValueError(f"{move} is not a legal move in this position")
 
 def get_square_color(pos: Pos) -> SquareColor:
     v = (pos.y + pos.x) % 2

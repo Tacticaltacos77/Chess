@@ -1,8 +1,8 @@
 from collections import defaultdict
-from pieces import Piece, Rook, PIECE_BY_LETTER, Castle
-from errors import InvalidFenError
-from helper import to_square, to_pos
-from typedef import *
+from .pieces import Piece, Rook, PIECE_BY_LETTER, Castle
+from .errors import InvalidFenError
+from .helper import to_square, to_pos
+from .typedef import *
 
 KING_START_X = 4
 

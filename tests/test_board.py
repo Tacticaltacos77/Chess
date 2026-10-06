@@ -1,10 +1,10 @@
 import pytest
 
-from board import Board
-from fen import DEFAULT_FEN
-from errors import IllegalBoardStateError
-from pieces import Bishop, King, Knight, Pawn, Piece, Queen, Rook
-from helper import to_pos
+from chesslibrary.board import Board
+from chesslibrary.fen import DEFAULT_FEN
+from chesslibrary.errors import IllegalBoardStateError
+from chesslibrary.pieces import Bishop, King, Knight, Pawn, Piece, Queen, Rook
+from chesslibrary.helper import to_pos
 
 
 

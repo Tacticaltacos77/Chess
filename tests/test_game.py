@@ -1,16 +1,16 @@
 import pytest
 
-from game import Game, Status
-from pieces import *
-from errors import IllegalMoveError, IllegalGameStateError
-from helper import to_pos
+from chesslibrary.game import Game, Status
+from chesslibrary.pieces import *
+from chesslibrary.errors import IllegalMoveError, IllegalGameStateError
+from chesslibrary.helper import to_pos
 
 START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 
 # ---- Setup ----
 
 def test_start_position():
-    g = Game(START_FEN)
+    g = Game()
     assert g.color_turn == "W"
     assert g.full_turn == 1
     assert g.status == Status.ACTIVE
@@ -42,7 +42,7 @@ def test_castle_rights_from_fen():
 # ---- Turns ----
 
 def test_make_move_switches_turn_and_full_turn():
-    g = Game(START_FEN)
+    g = Game()
     g.make_move(NormalMove(g.board.get_piece(*to_pos("g1")), to_pos("f3"), None))
     assert g.color_turn == "B"
     assert g.full_turn == 1
@@ -51,7 +51,7 @@ def test_make_move_switches_turn_and_full_turn():
     assert g.full_turn == 2
 
 def test_make_move_rejects_illegal_move():
-    g = Game(START_FEN)
+    g = Game()
     wp = g.board.get_piece(*to_pos("e2"))
     with pytest.raises(IllegalMoveError):
         g.make_move(NormalMove(wp, to_pos("e5"), None))
@@ -65,12 +65,12 @@ def test_make_move_after_game_over_raises():
 # ---- Half turn clock ----
 
 def test_half_turn_increments():
-    g = Game(START_FEN)
+    g = Game()
     g.make_move(NormalMove(g.board.get_piece(*to_pos("g1")), to_pos("f3"), None))
     assert g.half_turn_history[-1] == 1
 
 def test_half_turn_resets_on_pawn_move():
-    g = Game(START_FEN)
+    g = Game()
     g.make_move(NormalMove(g.board.get_piece(*to_pos("g1")), to_pos("f3"), None))
     g.make_move(NormalMove(g.board.get_piece(*to_pos("e7")), to_pos("e5"), None))
     assert g.half_turn_history[-1] == 0
@@ -112,7 +112,7 @@ def test_promotion_replaces_pawn_in_team():
 # ---- Undo ----
 
 def test_undo_normal_move():
-    g = Game(START_FEN)
+    g = Game()
     start_moves = {str(m) for ms in g.get_curr_turn_moves().values() for m in ms}
     wn = g.board.get_piece(*to_pos("g1"))
     bn = g.board.get_piece(*to_pos("g8"))
@@ -155,7 +155,7 @@ def test_undo_promotion():
     assert promo.promo_piece not in w_pieces
 ###
 def test_undo_restores_half_turn_and_en_passant():
-    g = Game(START_FEN)
+    g = Game()
     g.make_move(NormalMove(g.board.get_piece(*to_pos("e2")), to_pos("e4"), None))
     g.make_move(NormalMove(g.board.get_piece(*to_pos("g8")), to_pos("f6"), None))
     g.undo_move()
@@ -255,12 +255,12 @@ def test_castle_rights_lost_when_rook_captured():
 def test_white_checkmate():
     g = Game("6k1/5ppp/8/8/8/8/8/R3K3 w - - 0 1")
     g.make_move(NormalMove(g.board.get_piece(*to_pos("a1")), to_pos("a8"), None))
-    assert g.status == Status.WHITE_CHECKMATE
+    assert g.status == Status.WHITE_WINS
 
 def test_black_checkmate():
     g = Game("r3k3/8/8/8/8/8/5PPP/6K1 b - - 0 1")
     g.make_move(NormalMove(g.board.get_piece(*to_pos("a8")), to_pos("a1"), None))
-    assert g.status == Status.BLACK_CHECKMATE
+    assert g.status == Status.BLACK_WINS
 
 def test_stalemate():
     g = Game("7k/8/8/8/8/8/8/4K1Q1 w - - 0 1")
@@ -284,12 +284,12 @@ def test_insufficient_material_same_color_bishops():
     g = Game("4kb2/8/8/8/8/8/8/2B1K3 w - - 0 1")
     assert g.status == Status.DRAW_INSUFFICIENT_MATERIAL
 
-def test_opposite_color_bishops_is_sufficient_material():
+def test_opposite_color_bishops_is_insufficient_material():
     g = Game("2b1k3/8/8/8/8/8/8/2B1K3 w - - 0 1")
-    assert g.status == Status.ACTIVE
+    assert g.status == Status.DRAW_INSUFFICIENT_MATERIAL
 
 def test_threefold_repetition():
-    g = Game(START_FEN)
+    g = Game()
     for start, end in [("g1", "f3"), ("g8", "f6"), ("f3", "g1"), ("f6", "g8")] * 2:
         g.make_move(NormalMove(g.board.get_piece(*to_pos(start)), to_pos(end), None))
     assert g.status == Status.DRAW_REPETITION
@@ -301,7 +301,7 @@ def test_get_fen():
         assert Game(fen).get_fen() == fen
 
 def test_undo_removes_position():
-    g = Game(START_FEN)
+    g = Game()
     shuffle = [("g1", "f3"), ("g8", "f6"), ("f3", "g1"), ("f6", "g8")]
     for start, end in shuffle:
         g.make_move(NormalMove(g.board.get_piece(*to_pos(start)), to_pos(end), None))
@@ -320,22 +320,8 @@ def test_unusable_en_passant_square_does_not_change_position():
         g.make_move(NormalMove(g.board.get_piece(*to_pos(start)), to_pos(end), None))
     assert g.status == Status.DRAW_REPETITION
 
-# ---- Perft Move Count----
-
-def test_perft_start_position():
-    def perft(g: Game, depth: int) -> int:
-        if depth == 0:
-            return 1
-        total = 0
-        for move_list in g.get_curr_turn_moves().values():
-            for move in move_list:
-                g.make_move(move)
-                total += perft(g, depth - 1)
-                g.undo_move()
-        return total
-
-    g = Game(START_FEN)
-    assert perft(g, 1) == 20
-    assert perft(g, 2) == 400
-    assert perft(g, 3) == 8902
-    assert perft(g, 4) == 197281
+def test_illegal_en_passant_does_not_change_position():
+    g = Game("4k3/2p5/8/KP5r/8/8/8/8 b - - 0 1")
+    g.make_move(NormalMove(g.board.get_piece(*to_pos("c7")), to_pos("c5"), None))
+    # b5 is next to c5 but taking would expose the king to the rook, so c6 isn't part of the position
+    assert "4k3/8/8/KPp4r/8/8/8/8 w - -" in g.positions

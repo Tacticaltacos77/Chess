@@ -1,6 +1,6 @@
-from board import Board
-from pieces import *
-from helper import to_pos, to_square
+from chesslibrary.board import Board
+from chesslibrary.pieces import *
+from chesslibrary.helper import to_pos, to_square
 
 # ---- Pawn movement ----
 
@@ -400,7 +400,7 @@ def test_black_kingside_castle_apply_and_undo():
     bk = King("B", *to_pos("e8"))
     br = Rook("B", *to_pos("h8"))
     b = Board([bk, br])
-    m = Castle(bk, "K")
+    m = Castle(bk, "k")
     m.apply(b)
     assert b.get_square(*to_pos("e8")) is None
     assert b.get_square(*to_pos("h8")) is None
@@ -418,7 +418,7 @@ def test_black_queenside_castle_apply_and_undo():
     bk = King("B", *to_pos("e8"))
     br = Rook("B", *to_pos("a8"))
     b = Board([bk, br])
-    m = Castle(bk, "Q")
+    m = Castle(bk, "q")
     m.apply(b)
     assert b.get_square(*to_pos("e8")) is None
     assert b.get_square(*to_pos("a8")) is None

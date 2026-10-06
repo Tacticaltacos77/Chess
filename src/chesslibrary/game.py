@@ -1,18 +1,18 @@
 from typing import TYPE_CHECKING
-from errors import *
-from board import Board
-from pieces import *
+from .errors import *
+from .board import Board
+from .pieces import *
 from collections import defaultdict
 from enum import StrEnum
-from fen import Fen, DEFAULT_FEN
-from helper import to_square, get_square_color
-from typedef import *
+from .fen import Fen, DEFAULT_FEN
+from .helper import to_square, get_square_color
+from .typedef import *
 
 
 class Status(StrEnum):
     ACTIVE = "active"
-    WHITE_CHECKMATE = "white checkmate"
-    BLACK_CHECKMATE = "black checkmate"
+    WHITE_WINS = "white wins"
+    BLACK_WINS = "black wins"
     STALEMATE = "stalemate"
     DRAW_REPETITION = "draw repetition"
     DRAW_FIFTY_MOVE = "draw 50 move"
@@ -32,23 +32,23 @@ class Game:
     positions: defaultdict[str, int]
     status: Status
 
-    def __init__(self, fen: str):
+    def __init__(self, fen: str|None = None):
         f = Fen(fen) if fen else DEFAULT_FEN
         self.full_turn = f.full_turn
         self.half_turn_history = [f.half_turn]
         self.color_turn = f.turn
         self.move_history = []
         self.enPassentHistory = [f.en_passant]
-        pieces = f.build_pieces()
-        self.board = Board(pieces)
-        self.castle_rights = f.castle_rights
+        self.board = Board(f.build_pieces())
+        self.kings = self._set_kings()
+        self.castle_rights = set(f.castle_rights)
         self.lost_pieces = {"W": [], "B": []}
-        self.kings = self._find_kings(pieces)
+        
         self.positions = defaultdict(int)
         self.update_castle_vars()
         self.allowed_moves_history = [self.compute_curr_turn_moves()]
         self.status = self.compute_gamestate_status()
-        self.positions[self.get_fen().rsplit(" ", 2)[0]] = 1
+        self.positions[self._get_position()] = 1
 
     def get_fen(self) -> str:
         ep = self.enPassentHistory[-1]
@@ -60,28 +60,24 @@ class Game:
         # capturable because then it is actually a different position
         ep = self.enPassentHistory[-1]
         if ep:
-            opp_pieces = self.board.get_pieces(self.get_other_color(self.color_turn))
-            for p in opp_pieces:
-                if isinstance(p, Pawn) and p.isAttacking(ep, self.board):
-                    return self.get_fen().rsplit(" ", 2)[0]
+            y, x = Pawn.EN_PASSANT_ROW[self.color_turn], ep.x
+            for offset in (-1, 1):
+                moves = self.get_curr_turn_moves().get((y, x+offset), [])
+                for move in moves:
+                    if isinstance(move, EnPassant):
+                        return self.get_fen().rsplit(" ", 2)[0]
             
         return self.get_fen().rsplit(" ", 3)[0] +" -"
 
-    def _find_kings(self, pieces) -> Teams[King]:
-        w_kings = []
-        b_kings = []
-
-        for p in pieces:
+    def _set_kings(self) -> Teams[King]:
+        kings = {}
+        for p in self.board.get_pieces():
             if isinstance(p, King):
                 if p.color == "W":
-                    w_kings.append(p)
+                    kings["W"] = p
                 else:
-                    b_kings.append(p)
-
-        if len(w_kings) != 1 or len(b_kings) !=1:
-            raise IllegalGameStateError(f"must be one king for each side. W: {len(w_kings)}, B: {len(b_kings)}")
-        
-        return {"W": w_kings[0], "B": b_kings[0]}
+                    kings["B"] = p
+        return kings
     
     def get_curr_turn_moves(self):
         return self.allowed_moves_history[-1]
@@ -196,16 +192,17 @@ class Game:
         if self.color_turn == "W":
             self.full_turn+=1
 
+        self.allowed_moves_history.append(self.compute_curr_turn_moves())
         position = self._get_position() 
         self.positions[position] +=1
 
-        self.allowed_moves_history.append(self.compute_curr_turn_moves())
         self.status = self.compute_gamestate_status(position)
 
 
     def undo_move(self) -> None:
         if not self.move_history:
-            return
+            raise IllegalGameStateError()
+        
         position = self._get_position()
         self.positions[position] -=1
         if self.positions[position] == 0:
@@ -225,21 +222,33 @@ class Game:
         self.status = self.compute_gamestate_status()
 
     def check_sufficient_material(self) -> bool:
-        minor_pieces: list[Piece] = []
+        minor_pieces: dict[Team, list[Piece]] = {"W": [], "B": []}
         for t in TEAMS:
             for p in self.board.get_pieces(t):
                 if isinstance(p, (Pawn, Rook, Queen)):
                     return True
                 if not isinstance(p, King):
-                    minor_pieces.append(p)
+                    minor_pieces[p.color].append(p)
 
-        if len(minor_pieces) <=1:
-            return False
-        
-        first_square_color = get_square_color(minor_pieces[0].pos)
-        if all(isinstance(p, Bishop) and first_square_color==get_square_color(p.pos) for p in minor_pieces):
+        if len(minor_pieces["W"]) <= 1 and len(minor_pieces["B"]) <= 1:
             return False
 
+        first_square_color = get_square_color((minor_pieces["W"] + minor_pieces["B"])[0].pos)
+
+        # Check to make sure not all the Bishops are on the same squares
+        if all(isinstance(wp, Bishop) and first_square_color==get_square_color(wp.pos) for wp in minor_pieces["W"]):
+            if all(isinstance(bp, Bishop) and first_square_color==get_square_color(bp.pos) for bp in minor_pieces["B"]):
+                return False
+            
+        # Two Knights edge case
+        if len(minor_pieces["W"]) == 2 and len(minor_pieces["B"]) == 0:
+            wp1, wp2 = minor_pieces["W"]
+            if isinstance(wp1, Knight) and isinstance(wp2, Knight):
+                return False
+        elif len(minor_pieces["W"]) == 0 and len(minor_pieces["B"]) == 2:
+            bp1, bp2 = minor_pieces["B"]
+            if isinstance(bp1, Knight) and isinstance(bp2, Knight):
+                return False
         return True
 
     def compute_gamestate_status(self, last_position:str|None = None) -> Status:
@@ -248,9 +257,9 @@ class Game:
             c = self.color_turn
             if self.king_in_check(self.kings[self.color_turn]):
                 if c =="W":
-                    return Status.BLACK_CHECKMATE
+                    return Status.BLACK_WINS
                 else:
-                    return Status.WHITE_CHECKMATE
+                    return Status.WHITE_WINS
             else:
                 return Status.STALEMATE
         if not self.check_sufficient_material():

@@ -8,4 +8,4 @@ class IllegalMoveError(Exception):
     """The move is not one of the legal moves for the side to move."""
     
 class InvalidFenError(Exception):
-    """"""
+    """The fen didn't meet the FEN ruleset"""
