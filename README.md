@@ -55,31 +55,24 @@ print(game.get_fen())
 
 The game keeps track of the current position, turn, castling rights, en passant state, move counters, repetition history, legal moves, and game status.
 
-### Getting legal moves
+### Making moves
+
+`parse_move()` converts the library's move notation into the matching legal move for the current position.
 
 ```python
+from chesslibrary import Game
+
 game = Game()
 
-for moves in game.get_curr_turn_moves().values():
-    for move in moves:
-        print(move)
-```
+move = game.parse_move("pe2-e4")
+game.make_move(move)
 
-Moves are represented as objects and can be passed directly into `Game.make_move()`.
-
-```python
-move = next(
-    move
-    for moves in game.get_curr_turn_moves().values()
-    for move in moves
-    if str(move) == "pe2-e4"
-)
-
+move = game.parse_move("pe7-e5")
 game.make_move(move)
 
 print(game.get_fen())
-# rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1
 ```
+If the move is not legal in the current position, `parse_move()` raises an `IllegalMoveError`.
 
 Move strings use the piece, starting square, move type, and ending square:
 
@@ -90,6 +83,20 @@ Move strings use the piece, starting square, move type, and ending square:
 | Capture | `Bf1xc4`, `pe4xd5` |
 | Promotion | `pe7-e8=Q` |
 | Castling | `O-O`, `O-O-O` |
+
+### Getting legal moves
+
+Legal moves for the current turn can also be accessed directly:
+
+```python
+game = Game()
+
+for moves in game.get_curr_turn_moves().values():
+    for move in moves:
+        print(move)
+```
+
+Each legal move is represented as a `Move` object that can be passed directly into `Game.make_move()`.
 
 ### Loading positions with FEN
 
@@ -118,13 +125,11 @@ for moves in game.get_curr_turn_moves().values():
     for move in moves:
         game.make_move(move)
 
-        if game.status == Status.WHITE_CHECKMATE:
+        if game.status == Status.WHITE_WINS:
             print(f"{move} is checkmate")
 
         game.undo_move()
 ```
-
-This reversible move system is intended to provide the foundation for a future chess engine.
 
 ## Architecture
 

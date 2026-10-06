@@ -1,11 +1,10 @@
-from typing import TYPE_CHECKING
 from .errors import *
 from .board import Board
 from .pieces import *
 from collections import defaultdict
 from enum import StrEnum
 from .fen import Fen, DEFAULT_FEN
-from .helper import to_square, get_square_color
+from .helper import to_square, get_square_color, get_other_color
 from .typedef import *
 
 
@@ -78,14 +77,18 @@ class Game:
                 else:
                     kings["B"] = p
         return kings
-    
+        
     def get_curr_turn_moves(self):
         return self.allowed_moves_history[-1]
     
-    def get_other_color(self, color:Team) -> Team:
-        if color =="W":
-            return "B"
-        return "W"
+    def parse_move(self, move: str) -> Move:
+        """'pe2-e4', 'Ng8xf6', 'pe7-e8=Q', 'O-O' -> the matching legal Move from moves."""
+        move = move.strip()
+        for move_list in self.get_curr_turn_moves().values():
+            for m in move_list:
+                if str(m) == move:
+                    return m
+        raise IllegalMoveError(f"{move} is not a legal move in this position")
     
     def _is_en_pass_sq(self, y, x)->bool:
         return self.enPassentHistory[-1] == Pos(y, x)
@@ -115,7 +118,7 @@ class Game:
         if type(king) != King:
             raise TypeError(f"king_in_check expects a King, got {type(king).__name__}")
         color_p = king.color
-        opp_pieces = self.board.get_pieces(self.get_other_color(color_p))
+        opp_pieces = self.board.get_pieces(get_other_color(color_p))
         for p in opp_pieces:
             if p.isAttacking(king.pos, self.board):
                 return True
@@ -141,7 +144,7 @@ class Game:
         if self.king_in_check(king) or king.moved != 0 or castle.castle_side not in self.castle_rights:
             return False
         p = castle.piece
-        opp_pieces = self.board.get_pieces(self.get_other_color(p.color))
+        opp_pieces = self.board.get_pieces(get_other_color(p.color))
         castle_squares = castle.squares()
 
         for pos in castle_squares.must_be_unattacked:
@@ -187,7 +190,7 @@ class Game:
         self._add_en_passant(move)
         self.update_castle_vars()
 
-        self.color_turn = self.get_other_color(self.color_turn)
+        self.color_turn = get_other_color(self.color_turn)
 
         if self.color_turn == "W":
             self.full_turn+=1
@@ -214,7 +217,7 @@ class Game:
         self.enPassentHistory.pop()
         self.update_castle_vars()
 
-        self.color_turn = self.get_other_color(self.color_turn)
+        self.color_turn = get_other_color(self.color_turn)
         if self.color_turn == "B":
             self.full_turn-=1
             
