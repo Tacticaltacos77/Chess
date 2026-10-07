@@ -27,6 +27,7 @@ class Game:
     enPassentHistory:list[None|Pos]
     castle_rights: set
     kings: Teams[King]
+    lost_pieces: list[Piece]
     board: Board
     positions: defaultdict[str, int]
     status: Status
@@ -41,10 +42,9 @@ class Game:
         self.board = Board(f.build_pieces())
         self.kings = self._set_kings()
         self.castle_rights = set(f.castle_rights)
-        self.lost_pieces = {"W": [], "B": []}
-        
+        self.lost_pieces = []
         self.positions = defaultdict(int)
-        self.update_castle_vars()
+        self._update_castle_vars()
         self.allowed_moves_history = [self.compute_curr_turn_moves()]
         self.status = self.compute_gamestate_status()
         self.positions[self._get_position()] = 1
@@ -53,7 +53,7 @@ class Game:
         ep = self.enPassentHistory[-1]
         half_turn = self.half_turn_history[-1]
         return Fen.to_fen(self.board.grid, self.color_turn, self.castle_rights, ep, half_turn, self.full_turn)
-
+    
     def _get_position(self) -> str:
         # Positions shouldn't include the en passant in it unless the en passant pawn is actually
         # capturable because then it is actually a different position
@@ -88,6 +88,9 @@ class Game:
             for m in move_list:
                 if str(m) == move:
                     return m
+        if self.status != Status.ACTIVE:
+            raise IllegalGameStateError(f"game is already over: {self.status}")
+        
         raise IllegalMoveError(f"{move} is not a legal move in this position")
     
     def _is_en_pass_sq(self, y, x)->bool:
@@ -157,7 +160,7 @@ class Game:
                 return False
         return True
 
-    def update_castle_vars(self) -> None:
+    def _update_castle_vars(self) -> None:
         for side, squares in Castle.CASTLE_POS.items():
             color = "W" if side.isupper() else "B"
             rook = self.board.get_square(*squares.rook_start)
@@ -180,15 +183,16 @@ class Game:
         half_turn = self.half_turn_history[-1] + 1
         
         if isinstance(move, NormalMove) and move.capture:
+            self.lost_pieces.append(move.capture)
+
+        if isinstance(move.piece, Pawn) or (isinstance(move, NormalMove) and move.capture):
             half_turn = 0
 
-        if isinstance(move.piece, Pawn):
-            half_turn = 0
         self.half_turn_history.append(half_turn)
         self.move_history.append(move)
         
         self._add_en_passant(move)
-        self.update_castle_vars()
+        self._update_castle_vars()
 
         self.color_turn = get_other_color(self.color_turn)
 
@@ -212,11 +216,13 @@ class Game:
             self.positions.pop(position)
         move = self.move_history.pop()
         move.undo(self.board)
+        if isinstance(move, NormalMove) and move.capture:
+            self.lost_pieces.pop()
 
         self.half_turn_history.pop()
         self.enPassentHistory.pop()
-        self.update_castle_vars()
-
+        self._update_castle_vars()
+  
         self.color_turn = get_other_color(self.color_turn)
         if self.color_turn == "B":
             self.full_turn-=1
